@@ -107,6 +107,7 @@ private:
   static  Double_t phiRange;
   static  Double_t MINPHI;
   static  Double_t MAXPHI;
+  static Double_t IntegralTolerance;
   Int_t nbinsBkgd;
   Float_t phiRangeBkgd;
   //Constants so that code runs more efficiently

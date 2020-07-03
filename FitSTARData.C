@@ -1,7 +1,8 @@
-#include "CorrData.h"
+//#include "CorrData.h"
 //#include "CorrData.cxx"
 //class CorrData;
 //set ranges for histograms
+R__LOAD_LIBRARY(CorrData.cxx);
 Float_t MINPHI = -TMath::Pi()/2.0;
 Float_t MAXPHI = TMath::Pi()*3.0/2.0;
 Float_t shiftPhi(Float_t phi){
@@ -116,12 +117,12 @@ void FitSTARData(Int_t trigBin = 1, Int_t assocBin = 4){
   gStyle->SetOptStat(0);
   gStyle->SetOptFit(0);
 
-   gROOT->ProcessLine(".L CorrData.cxx++");
+   //gROOT->ProcessLine(".L CorrData.cxx++");
    gSystem->Load("libPhysics");
    //gROOT->ProcessLine(".L BackgroundFunction.cxx+");
    //gROOT->ProcessLine(".L BackgroundFunction.C+");
    //gROOT->LoadMacro("BackgroundFunction.C");
-   gROOT->ProcessLine(".L CorrData.cxx++");
+   //gROOT->ProcessLine(".L CorrData.cxx++");
     // gROOT->LoadLibrary(CorrData.)
    CorrData *dataAssoc2Trig4 = new CorrData();
    //this line reads in the data
@@ -160,7 +161,7 @@ void FitSTARData(Int_t trigBin = 1, Int_t assocBin = 4){
    fitFunc->SetParLimits(5,0,1e-3);
    dataAssoc2Trig4->FitCommonBackgroundHistogram();
    //return;
-   dataAssoc2Trig4->GetCommonBackgroundFunction()->Draw("same");
+    dataAssoc2Trig4->GetCommonBackgroundFunction()->Draw("same");
    dataAssoc2Trig4->DrawSignalPlusBackground();
    dataAssoc2Trig4->DrawBackground();
    dataAssoc2Trig4->DrawSignal();

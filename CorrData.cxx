@@ -17,6 +17,9 @@
 #include <fstream>
 #include <iostream>
 #include "TLatex.h"
+#include "TF1.h"
+#include "Math/WrappedTF1.h"
+#include "Math/GSLIntegrator.h"
 Float_t Rn[5] = {1.0,1.0,1.0,1.0,1.0};
 
 ClassImp(CorrData)
@@ -65,6 +68,7 @@ Double_t CorrData::R6FracErr = 0.03;
 //Histogram ranges - these generally should not be changed.  The input data do not run over the same ranges and therefore are shifted.  Care should be used if and when shifting these.  The phi range used in the fit needs to fit on the negative side here and the range needs to be 2Pi
 Double_t CorrData::MINPHI = -TMath::Pi()/2.0;
 Double_t CorrData::MAXPHI = TMath::Pi()*3.0/2.0;
+Double_t CorrData::IntegralTolerance = 0.01;
 //______________________________________________________________________________
 CorrData::CorrData()
 {
@@ -183,7 +187,7 @@ TH1F *CorrData::GetSignalPlusBackgroundHistogram(Int_t bin) {
     return hSignalPlusBkgd[bin];
   }
   else{
-    cerr<<"Warning:  Requested histogram "<<bin<<" and there are only "<<nBinsInRxnPlane<<" histograms"<<endl;
+    //cerr<<"Warning:  Requested histogram "<<bin<<" and there are only "<<nBinsInRxnPlane<<" histograms"<<endl;
     return NULL;
   }
 }
@@ -194,7 +198,7 @@ TH1F *CorrData::GetBackgroundHistogram(Int_t bin) {
     return hBkgd[bin];
   }
   else{
-    cerr<<"Warning:  Requested histogram "<<bin<<" and there are only "<<nBinsInRxnPlane<<" histograms"<<endl;
+    //cerr<<"Warning:  Requested histogram "<<bin<<" and there are only "<<nBinsInRxnPlane<<" histograms"<<endl;
     return NULL;
   }
 }
@@ -205,7 +209,7 @@ TH1F *CorrData::GetSignalHistogram(Int_t bin) {
     return hSignal[bin];
   }
   else{
-    cerr<<"Warning:  Requested histogram "<<bin<<" and there are only "<<nBinsInRxnPlane<<" histograms"<<endl;
+    //cerr<<"Warning:  Requested histogram "<<bin<<" and there are only "<<nBinsInRxnPlane<<" histograms"<<endl;
     return NULL;
   }
 }
@@ -279,7 +283,7 @@ void CorrData::CreateCommonBackgroundHisto(char *name){
 }
 Double_t CorrData::ConvertPhiToCommonPhi(Int_t bin, Double_t phi){
   if(TMath::Abs(phi)>phiRange){
-    cerr<<"phi "<<phi<<" out of range!"<<endl;
+    //cerr<<"phi "<<phi<<" out of range!"<<endl;
     return -1;
   }
   //cout<<"changing "<<phi<<" in bin "<<bin<<" to "<<phiRange*(bin*2.0+1)+phi<<endl;
@@ -289,7 +293,7 @@ Double_t CorrData::ConvertCommonPhiToPhi(Int_t bin, Double_t phi){
   Double_t newphi = phi - phiRange*(bin*2.0+1);
   return newphi;
   if(TMath::Abs(phi)>phiRange){
-    cerr<<"phi "<<phi<<" out of range!"<<endl;
+    //cerr<<"phi "<<phi<<" out of range!"<<endl;
     return -1;
   }
   //cout<<"changing "<<phi<<" in bin "<<bin<<" to "<<phiRange*(bin*2.0+1)+phi<<endl;
@@ -589,9 +593,14 @@ void CorrData::SetBackgroundHistogram(Int_t bin, TH1F *histo){
 }
 
 void CorrData::FitCommonBackgroundHistogram(){
+    ROOT::Math::IntegratorOneDimOptions::SetDefaultIntegrator("Gauss");
+ROOT::Math::IntegratorOneDimOptions::SetDefaultAbsTolerance(IntegralTolerance);
+ROOT::Math::IntegratorOneDimOptions::SetDefaultRelTolerance(IntegralTolerance);
+//ROOT::Math::IntegratorOneDimOptions::SetDefaultNPoints(1);
+
   //we need to do the fits in succession because we get the error bars by getting the current TVirtualFitter
   hCommonBkgd->Fit(fitFunc);
-  cerr<<"done with fit 1"<<endl;
+  //cerr<<"done with fit 1"<<endl;
   cout<<"Chi2 "<<fitFunc->GetChisquare()<<" NDF "<<fitFunc->GetNDF()<<" chi^2/ndf "<< fitFunc->GetChisquare() / fitFunc->GetNDF() <<endl;//hCommonBkgd
   cout<<" & ";
   cout<<Form("%2.2f & ",fitFunc->GetChisquare() / fitFunc->GetNDF());
@@ -602,9 +611,9 @@ void CorrData::FitCommonBackgroundHistogram(){
   cout<<Form("%2.1f $\\pm$ %2.1f & ",fitFunc->GetParameter(3)*100.0, fitFunc->GetParError(3)*100.0);
   cout<<Form("%2.2f $\\pm$ %2.2f \\\\ ",fitFunc->GetParameter(5)*100.0, fitFunc->GetParError(5)*100.0)<<endl;
   //the default is to give 95% confidence intervals but we want the standard 1 sigma (68%) confidence intervals
-  cerr<<"Getting confidence intervals fit 1"<<endl;
+  //cerr<<"Getting confidence intervals fit 1"<<endl;
   (TVirtualFitter::GetFitter())->GetConfidenceIntervals(hCommonBkgd, 0.68);
-  cerr<<"done with confidence intervals fit 1"<<endl;
+  //cerr<<"done with confidence intervals fit 1"<<endl;
   for(Int_t i=0;i<nBinsInRxnPlane;i++){
     for(Int_t j=0;j<6;j++){
       fBkgd[i]->SetParameter(j,fitFunc->GetParameter(j));
@@ -616,40 +625,40 @@ void CorrData::FitCommonBackgroundHistogram(){
       fBkgdInSignalPlusBkgdRegionLowScale[i]->SetParError(j,fitFunc->GetParError(j));
       fBkgdInSignalPlusBkgdRegionHighScale[i]->SetParError(j,fitFunc->GetParError(j));
     }
-    //cerr<<"Line 619"<<endl;
+    ////cerr<<"Line 619"<<endl;
     hCalcBkgd[i] = GetBackgroundErrorPW(hSignalPlusBkgd[i],fBkgd[i]);
     hCalcBkgd[i]->SetLineColor(kRed);
     hCalcBkgd[i]->SetMarkerColor(kRed);
     hCalcBkgdInSignalPlusBackgroundRegion[i] = (TH1F*) hCalcBkgd[i]->Clone(Form("%sInSignalPlusBackgroundRegion",hCalcBkgd[i]->GetName()));
     hCalcBkgdInSignalPlusBackgroundRegion[i]->Scale(etaRangeSigToBkgdRatio);
     hSignal[i]->Add(hCalcBkgdInSignalPlusBackgroundRegion[i],-1.0);
-    cerr<<"Line 626->"<<endl;
+    //cerr<<"Line 626->"<<endl;
     CalculateNetYield(hSignalPlusBkgd[i],fBkgdInSignalPlusBkgdRegion[i],i,0);
 
-    cerr<<"<-Line 628"<<endl;
+    //cerr<<"<-Line 628"<<endl;
     hCalcBkgdInSignalPlusBackgroundRegionLowScale[i] = (TH1F*) hCalcBkgd[i]->Clone(Form("%sInSignalPlusBackgroundRegion",hCalcBkgd[i]->GetName()));
     hCalcBkgdInSignalPlusBackgroundRegionLowScale[i]->Scale(etaRangeSigToBkgdRatioLow);
     hSignalLowScale[i]->Add(hCalcBkgdInSignalPlusBackgroundRegionLowScale[i],-1.0);
-    cerr<<"Line 633->"<<endl;
+    //cerr<<"Line 633->"<<endl;
     CalculateNetYield(hSignalPlusBkgd[i],fBkgdInSignalPlusBkgdRegionLowScale[i],i,-2);
 
-cerr<<"<-Line 634"<<endl; 
+//cerr<<"<-Line 634"<<endl; 
     hCalcBkgdInSignalPlusBackgroundRegionHighScale[i] = (TH1F*) hCalcBkgd[i]->Clone(Form("%sInSignalPlusBackgroundRegion",hCalcBkgd[i]->GetName()));
     hCalcBkgdInSignalPlusBackgroundRegionHighScale[i]->Scale(etaRangeSigToBkgdRatioHigh);
     hSignalHighScale[i]->Add(hCalcBkgdInSignalPlusBackgroundRegionHighScale[i],-1.0);
-    cerr<<"Line 640->"<<endl;
+    //cerr<<"Line 640->"<<endl;
     CalculateNetYield(hSignalPlusBkgd[i],fBkgdInSignalPlusBkgdRegionHighScale[i],i,2);
-cerr<<"<-Line 642"<<endl;
+//cerr<<"<-Line 642"<<endl;
     
     fBkgdInSignalPlusBkgdRegion[i]->SetParameter(0,etaRangeSigToBkgdRatio*fitFunc->GetParameter(0));//a function called in the previous function resets the background parameter but we need to do that to get the error bars correctly. 
     fBkgdInSignalPlusBkgdRegion[i]->SetParError(0,etaRangeSigToBkgdRatio*fitFunc->GetParError(0));
-//cerr<<"Line 642"<<endl; 
+////cerr<<"Line 642"<<endl; 
 
   }
   //low R fits
-  cerr<<"starting fit 2"<<endl;
+  //cerr<<"starting fit 2"<<endl;
   hCommonBkgd->Fit(fitFuncLowR);
-  cerr<<"done with fit 2"<<endl;
+  //cerr<<"done with fit 2"<<endl;
   //the default is to give 95% confidence intervals but we want the standard 1 sigma (68%) confidence intervals
   (TVirtualFitter::GetFitter())->GetConfidenceIntervals(hCommonBkgd, 0.68);
   for(Int_t i=0;i<nBinsInRxnPlane;i++){
@@ -672,9 +681,9 @@ cerr<<"<-Line 642"<<endl;
     fBkgdInSignalPlusBkgdRegionLowR[i]->SetParError(0,etaRangeSigToBkgdRatio*fitFuncLowR->GetParError(0));
   }
   //high R fits
-  cerr<<"starting fit 3"<<endl;
+  //cerr<<"starting fit 3"<<endl;
   hCommonBkgd->Fit(fitFuncHighR);
-cerr<<"done with fit 3"<<endl;
+//cerr<<"done with fit 3"<<endl;
     //the default is to give 95% confidence intervals but we want the standard 1 sigma (68%) confidence intervals
   (TVirtualFitter::GetFitter())->GetConfidenceIntervals(hCommonBkgd, 0.68);
   for(Int_t i=0;i<nBinsInRxnPlane;i++){
@@ -856,8 +865,12 @@ void CorrData::DrawSignal(){
    Float_t max = -1;
    Float_t min = 1.0;
    for(Int_t i=0;i<nBinsInRxnPlane;i++){
-     if(hSignal[i]->GetMaximum()>max) max = hSignal[i]->GetMaximum();
-     if(hSignal[i]->GetMinimum()<min) min = hSignal[i]->GetMinimum();
+     if(hSignal[i]->GetMaximum()>max){
+       max = hSignal[i]->GetMaximum();
+      }
+     if(hSignal[i]->GetMinimum()<min){
+       min = hSignal[i]->GetMinimum();
+     }
    }
    max = max + (max-min)*0.1;
    min = min - (max-min)*0.1;
@@ -923,7 +936,7 @@ Double_t CorrData::GradientParPW(Int_t ipar, const Double_t x, Double_t eps, TF1
    // If a paramter is fixed, the gradient on this parameter = 0
 
    if (inputFuncForErrors->GetNumberFreeParameters() == 0){
-     cerr<<"No free parameters!"<<endl;
+     //cerr<<"No free parameters!"<<endl;
      return 0; 
    }
 
@@ -934,7 +947,7 @@ Double_t CorrData::GradientParPW(Int_t ipar, const Double_t x, Double_t eps, TF1
    inputFuncForErrors->GetParLimits(ipar,al,bl);
    if (al*bl != 0 && al >= bl) {
       //this parameter is fixed
-      cerr<<"Par "<<ipar<<"is fixed!"<<endl;
+      //cerr<<"Par "<<ipar<<"is fixed!"<<endl;
       return 0;
    }
 
@@ -1014,7 +1027,7 @@ Double_t CorrData::DERPW(Int_t ipar, const Double_t x, Double_t eps, TF1 *inputF
    // If a paramter is fixed, the gradient on this parameter = 0
 
    if (inputFuncForErrors->GetNumberFreeParameters() == 0){
-     cerr<<"No free parameters!"<<endl;
+     //cerr<<"No free parameters!"<<endl;
      return 0; 
    }
 
@@ -1025,7 +1038,7 @@ Double_t CorrData::DERPW(Int_t ipar, const Double_t x, Double_t eps, TF1 *inputF
    inputFuncForErrors->GetParLimits(ipar,al,bl);
    if (al*bl != 0 && al >= bl) {
       //this parameter is fixed
-      cerr<<"Par "<<ipar<<"is fixed!"<<endl;
+      //cerr<<"Par "<<ipar<<"is fixed!"<<endl;
       return 0;
    }
 
@@ -1183,6 +1196,7 @@ TH1F *CorrData::GetBackgroundErrorPW(TH1F *inputHisto, TF1 *inputFunc){
   return hOutput;
 }
 void CorrData::CalculateNetYield(TH1 *histo, TF1 *inputFunc, Int_t rxnPlaneBin, Int_t option){
+//cerr<<"I am entering Calculate Net Yield"<<endl;
   //cout<<"Calculating yields from "<<histo->GetName()<<" using function "<<inputFunc->GetName()<<endl;
   Double_t *covMatrixPW = (TVirtualFitter::GetFitter())->GetCovarianceMatrix();
   const Int_t npar = fitFunc->GetNumberFreeParameters();
@@ -1205,17 +1219,26 @@ void CorrData::CalculateNetYield(TH1 *histo, TF1 *inputFunc, Int_t rxnPlaneBin, 
   Double_t yielderr = 0.0;
   Double_t yield = histo->IntegralAndError(lowBin,highBin,yielderr,"width");
   // get integral and integral error of fit function of background for yield calculation
-  Double_t background = etaRangeSigToBkgdRatio*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh, 1E-12);   
-  Double_t backgrounderr = etaRangeSigToBkgdRatio*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW, 0.01);
+  //cerr<<"L1214 integral->"<<endl;
+  Double_t background = etaRangeSigToBkgdRatio*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh);   
+  //cerr<<"L1216 <-integral, error->"<<endl;
+  Double_t backgrounderr = etaRangeSigToBkgdRatio*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW);
+  //cerr<<"L1218 <-error"<<endl;
   if(option==-2){
-    background = etaRangeSigToBkgdRatioLow*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh, 1E-12);   
-    backgrounderr = etaRangeSigToBkgdRatioLow*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW, 0.01);
-    nsYieldLowScale[rxnPlaneBin] = (yield - background);
+  //cerr<<"L1220 integral->"<<endl;
+    background = etaRangeSigToBkgdRatioLow*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh);   
+    //cerr<<"L1222 <-integral, error->"<<endl;
+  backgrounderr = etaRangeSigToBkgdRatioLow*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW);
+    //cerr<<"L1224 <-error"<<endl;
+  nsYieldLowScale[rxnPlaneBin] = (yield - background);
     nsYieldErrorLowScale[rxnPlaneBin] = 1.0*TMath::Sqrt(yielderr*yielderr + backgrounderr*backgrounderr);
   }
   if(option==2){
-    background = etaRangeSigToBkgdRatioHigh*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh, 1E-12);   
-    backgrounderr = etaRangeSigToBkgdRatioHigh*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW, 0.01);
+  //cerr<<"L1227 integral->"<<endl;
+    background = etaRangeSigToBkgdRatioHigh*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh);   
+    //cerr<<"L1230 <-integral, error->"<<endl;
+  backgrounderr = etaRangeSigToBkgdRatioHigh*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW);
+  //cerr<<"L1224 <-error"<<endl;
     nsYieldHighScale[rxnPlaneBin] = (yield - background);
     nsYieldErrorHighScale[rxnPlaneBin] = 1.0*TMath::Sqrt(yielderr*yielderr + backgrounderr*backgrounderr);
   }
@@ -1245,44 +1268,67 @@ void CorrData::CalculateNetYield(TH1 *histo, TF1 *inputFunc, Int_t rxnPlaneBin, 
   //cout<<"As yield covers bins "<<lowBin<<" - "<<highBin<<", phi "<<asRealPhiCutLow<<" - "<<asRealPhiCutHigh<<endl;
   // get yield and yield error of histo
   yielderr = 0.0;
+  //cerr<<"L1263 integral and error ->"<<endl;
   yield = histo->IntegralAndError(lowBin,highBin,yielderr,"width");
+  //cerr<<"L1265 integral and error <-"<<endl;
   // get integral and integral error of fit function of background for yield calculation
-  background = etaRangeSigToBkgdRatio*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh, 1E-12);   
-  backgrounderr = etaRangeSigToBkgdRatio*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW, 0.01);
-  // get difference and scale to make readable
+ //cerr<<"L1267 integral->"<<endl;
+   background = etaRangeSigToBkgdRatio*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh);   
+ //cerr<<"L1268 integral <- error ->"<<endl;
+  backgrounderr = etaRangeSigToBkgdRatio*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW);
+  //cerr<<"L1272 <- error"<<endl;
+ // get difference and scale to make readable
   if(option==0){
     asYield[rxnPlaneBin] = (yield - background);
     asYieldError[rxnPlaneBin] = 1.0*TMath::Sqrt(yielderr*yielderr + backgrounderr*backgrounderr);
+    //cerr<<"calculate RMS 1277 ->"<<endl;
     CalculateRMS(histo,inputFunc,nsRealPhiCutLow, nsRealPhiCutHigh, 0.0, rxnPlaneBin,nsRMS[rxnPlaneBin],nsRMSError[rxnPlaneBin] ,0);
+    //cerr<<"calculate RMS 1279 <->"<<endl;
     CalculateRMS(histo,inputFunc,asRealPhiCutLow, asRealPhiCutHigh, mypi, rxnPlaneBin,asRMS[rxnPlaneBin],asRMSError[rxnPlaneBin] ,0 );
-  }
+  //cerr<<"calculate RMS 1281 <-"<<endl;
+    }
   if(option==-2){
-    background = etaRangeSigToBkgdRatioLow*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh, 1E-12);   
-    backgrounderr = etaRangeSigToBkgdRatioLow*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW, 0.01);
+    //cerr<<"L1278 integral->"<<endl;
+  background = etaRangeSigToBkgdRatioLow*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh);   
+  //cerr<<"L1280 integral->"<<endl;
+    backgrounderr = etaRangeSigToBkgdRatioLow*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW);
+  //cerr<<"L1282 <-error"<<endl;
     asYieldLowScale[rxnPlaneBin] = (yield - background);
     asYieldErrorLowScale[rxnPlaneBin] = 1.0*TMath::Sqrt(yielderr*yielderr + backgrounderr*backgrounderr);
     CalculateRMS(histo,inputFunc,nsRealPhiCutLow, nsRealPhiCutHigh, 0.0, rxnPlaneBin,nsRMSLowScale[rxnPlaneBin],nsRMSErrorLowScale[rxnPlaneBin] ,-2);
     CalculateRMS(histo,inputFunc,asRealPhiCutLow, asRealPhiCutHigh, mypi, rxnPlaneBin,asRMSLowScale[rxnPlaneBin],asRMSErrorLowScale[rxnPlaneBin] ,-2 );
   }
   if(option==2){
-    background = etaRangeSigToBkgdRatioHigh*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh, 1E-12);   
-    backgrounderr = etaRangeSigToBkgdRatioHigh*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW, 0.01);
+  //cerr<<"L1289 integral->"<<endl;
+    background = etaRangeSigToBkgdRatioHigh*inputFunc->Integral(nsRealPhiCutLow, nsRealPhiCutHigh);   
+  //cerr<<"L1291 integral->"<<endl;
+    backgrounderr = etaRangeSigToBkgdRatioHigh*inputFunc->IntegralError(nsRealPhiCutLow, nsRealPhiCutHigh, fParams, covMatrixPW);
+  //cerr<<"L1293 <-error"<<endl;
     asYieldHighScale[rxnPlaneBin] = (yield - background);
     asYieldErrorHighScale[rxnPlaneBin] = 1.0*TMath::Sqrt(yielderr*yielderr + backgrounderr*backgrounderr);
+    //cerr<<"calculate RMS 1302 ->"<<endl;
     CalculateRMS(histo,inputFunc,nsRealPhiCutLow, nsRealPhiCutHigh, 0.0, rxnPlaneBin,nsRMSHighScale[rxnPlaneBin],nsRMSErrorHighScale[rxnPlaneBin] ,2);
+    //cerr<<"calculate RMS 1304 <->"<<endl;
     CalculateRMS(histo,inputFunc,asRealPhiCutLow, asRealPhiCutHigh, mypi, rxnPlaneBin,asRMSHighScale[rxnPlaneBin],asRMSErrorHighScale[rxnPlaneBin] ,2 );
+  //cerr<<"calculate RMS 1306 <-"<<endl;
   }
   if(option==-1){
     asYieldLowR[rxnPlaneBin] = (yield - background);
     asYieldErrorLowR[rxnPlaneBin] = 1.0*TMath::Sqrt(yielderr*yielderr + backgrounderr*backgrounderr);
+    //cerr<<"calculate RMS 1311 ->"<<endl;
     CalculateRMS(histo,inputFunc,nsRealPhiCutLow, nsRealPhiCutHigh, 0.0, rxnPlaneBin,nsRMSLowR[rxnPlaneBin],nsRMSErrorLowR[rxnPlaneBin] ,-1);
+    //cerr<<"calculate RMS 1313 <->"<<endl;
     CalculateRMS(histo,inputFunc,asRealPhiCutLow, asRealPhiCutHigh, mypi, rxnPlaneBin,asRMSLowR[rxnPlaneBin],asRMSErrorLowR[rxnPlaneBin] ,-1 );
+  //cerr<<"calculate RMS 1315 <-"<<endl;
   }
   if(option==1){
     asYieldHighR[rxnPlaneBin] = (yield - background);
     asYieldErrorHighR[rxnPlaneBin] = 1.0*TMath::Sqrt(yielderr*yielderr + backgrounderr*backgrounderr);
+    //cerr<<"calculate RMS 1320 ->"<<endl;
     CalculateRMS(histo,inputFunc,nsRealPhiCutLow, nsRealPhiCutHigh, 0.0, rxnPlaneBin,nsRMSHighR[rxnPlaneBin],nsRMSErrorHighR[rxnPlaneBin] ,1);
+    //cerr<<"calculate RMS 1322 <->"<<endl;
     CalculateRMS(histo,inputFunc,asRealPhiCutLow, asRealPhiCutHigh, mypi, rxnPlaneBin,asRMSHighR[rxnPlaneBin],asRMSErrorHighR[rxnPlaneBin] ,1 );
+  //cerr<<"calculate RMS 1324 <-"<<endl;
   }
 
 
@@ -1510,7 +1556,7 @@ void CorrData::CalculateRMS(TH1 *histo, TF1 *fMyBackground,Double_t lowrange, Do
   }
 
   if(!fBkgdTemp){
-    cerr<<"Warning: function not set!  Cannot calculate RMS"<<endl;
+    //cerr<<"Warning: function not set!  Cannot calculate RMS"<<endl;
     return;
   }
   Double_t *covMatrixPW = (TVirtualFitter::GetFitter())->GetCovarianceMatrix();
@@ -1520,10 +1566,12 @@ void CorrData::CalculateRMS(TH1 *histo, TF1 *fMyBackground,Double_t lowrange, Do
     fParams[i] = fitFunc->GetParameter(i);
     fBkgdTemp->SetParameter(i, fMyBackground->GetParameter(i));
   }   // loop over free parameters
-
-  Double_t background = scale*fBkgdTemp->Integral(lowrange, highrange, 1E-12);   
-  Double_t backgrounderr = scale*fBkgdTemp->IntegralError(lowrange, highrange, fParams, covMatrixPW, 0.01);
-  //The RMS is sqrt(1/yield * (sum(content*x^2) - integral(background*x^2)))
+//cerr<<"1564 RMS integral "<<endl;
+  Double_t background = scale*fBkgdTemp->Integral(lowrange, highrange);   
+//cerr<<"1564 RMS <- integral error -> "<<endl;
+  Double_t backgrounderr = scale*fBkgdTemp->IntegralError(lowrange, highrange, fParams, covMatrixPW);
+ //cerr<<"1568 RMS <- error "<<endl;
+ //The RMS is sqrt(1/yield * (sum(content*x^2) - integral(background*x^2)))
   //The yield is really a normalization so we will treat it as errorless
   //We'll write this as R = sqrt((a-b)/c)
   //dR/da = 1/2 1/R
@@ -1532,7 +1580,7 @@ void CorrData::CalculateRMS(TH1 *histo, TF1 *fMyBackground,Double_t lowrange, Do
   RMSError = 0.5/RMS*TMath::Sqrt(backgrounderr*backgrounderr+part1err);
   //cout<<"range "<<lowrange<<" - "<<highrange<<" ";
   //cout<<"background "<<background/sum<<" +/- "<<backgrounderr/sum<<" meanxx "<<meanxx<<" +/- "<<TMath::Sqrt(part1err)/sum<<" sum "<<sum<<" sumx "<<sumx<<" sumxx "<<sumxx<<" meanx "<<meanx<<" meanxx "<<meanxx<<endl;
-//   Double_t bkgdtmp = fMyBackground->Integral(lowrange, highrange, fParams, 1E-12);   
+//   Double_t bkgdtmp = fMyBackground->Integral(lowrange, highrange, fParams);   
 //   cout<<"part1 "<<part1<<" sqrt part1/part2 "<<TMath::Sqrt(part1/part2)<<" bkgd*x*x "<<background<<" sqrt bkgd*x*x/bkgd "<<TMath::Sqrt(background/bkgdtmp)<<endl;
 //   RMS = TMath::Sqrt((part1-background)/yield);
 //   RMSError = TMath::Sqrt(part1err/yield);
